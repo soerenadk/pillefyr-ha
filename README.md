@@ -50,8 +50,8 @@ data:
 
 ### Bemærkninger
 
+- **Status:** integrationen er **kortvarigt testet** i reel drift (læs, skriv, start, stop, bypass — Blackstar 1016, controller v7.068). Finder du udfordringer, så skriv et issue her på GitHub — vi kigger på det med det samme.
 - Cloud-API'en cacher data (~5 min forsinkelse) — nok til styring og status, ikke sekund-live
-- Data wrotes er testet mod Blackstar 1016 (controller v7.068)
 
 ---
 
@@ -89,8 +89,8 @@ sensor:
 
 ### Notes
 
+- **Status:** the integration is **briefly tested** in real operation (read, write, start, stop, bypass — Blackstar 1016, controller v7.068). If you hit issues, open a GitHub issue — we'll look at it right away.
 - The cloud API caches data (~5 min lag) — fine for control and status, not second-live telemetry
-- Tested against a Blackstar 1016 (controller v7.068)
 
 ---
 

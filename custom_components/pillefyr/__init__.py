@@ -1,21 +1,22 @@
-"""Blackstar/NBE pillefyr via Stokercloud API. Bygget af Amber, sep 22."""
+"""Blackstar/NBE pillefyr via Stokercloud API. Bygget af Amber, sep 22.
+
+v1.2: UI-opsætning via config flow (Tilføj integration) + knapper og
+timer-switch. Gamle YAML-opsætning virker stadig som før.
+"""
 import json
 import logging
 from datetime import timedelta
 
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
+from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-DOMAIN = "pillefyr"
-LOGGER = logging.getLogger(__name__)
-
-BASE = "https://stokercloud.dk/v2/dataout2"
-MENUS = ["boiler", "advanced", "notification", "setup", "cleaning", "ext_feed", "fan", "screen"]
-SCAN_INTERVAL = timedelta(minutes=5)
+from .const import BASE, DOMAIN, LOGGER, MENUS, PLATFORMS, SCAN_INTERVAL
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -69,15 +70,15 @@ class PilleFyrAPI:
     async def set_value(self, name, value):
         if not self.token:
             await self.login()
-        text = await self._get(f"{BASE}/updatevalue.php?name={name}&value={value}&token={self.token}")
+        text = await self._get(
+            f"{BASE}/updatevalue.php?name={name}&value={value}&token={self.token}"
+        )
         LOGGER.info("set_value %s=%s -> %s", name, value, text[:100])
         return text
 
 
-async def async_setup(hass: HomeAssistant, config):
-    conf = config[DOMAIN]
-    session = async_get_clientsession(hass)
-    api = PilleFyrAPI(session, conf[CONF_USERNAME], conf[CONF_PASSWORD])
+def make_coordinator(hass, api):
+    """Bygger DataUpdateCoordinator der læser alle menuer."""
 
     async def async_fetch():
         data = {}
@@ -99,44 +100,119 @@ async def async_setup(hass: HomeAssistant, config):
             raise UpdateFailed("Ingen data fra nogen menuer")
         return data
 
-    coordinator = DataUpdateCoordinator(
+    return DataUpdateCoordinator(
         hass, LOGGER, name="pillefyr", update_method=async_fetch,
         update_interval=SCAN_INTERVAL,
     )
-    hass.data[DOMAIN] = {"api": api, "coordinator": coordinator, "bypass": False}
-    await coordinator.async_refresh()
+
+
+def ensure_state(hass, api=None):
+    """Sikrer at hass.data[DOMAIN] har api + coordinator (genbruges på tværs af YAML/entry)."""
+    hass.data.setdefault(DOMAIN, {})
+    data = hass.data[DOMAIN]
+    if api is not None and "api" not in data:
+        data["api"] = api
+    if "coordinator" not in data and api is not None:
+        data["coordinator"] = make_coordinator(hass, api)
+    data.setdefault("bypass", False)
+    return data
+
+
+async def do_start(hass, value=1, ignorer_ur=False):
+    """misc.start — lægger fyret under timeren.
+    ignorer_ur: true => timer slås midlertidigt FRA og restores ved næste stop
+    (kommandoen "tænd fyret uanset uret")."""
+    data = hass.data[DOMAIN]
+    api = data["api"]
+    if ignorer_ur:
+        state = (data["coordinator"].data or {}).get("boiler.timer")
+        if state == 1:
+            await api.set_value("boiler.timer", 0)
+            data["bypass"] = True
+    await api.set_value("misc.start", value)
+    await data["coordinator"].async_request_refresh()
+
+
+async def do_stop(hass, value=1):
+    """misc.stop = hård off. Restorer timeren hvis en bypass-start havde slået den fra."""
+    data = hass.data[DOMAIN]
+    api = data["api"]
+    await api.set_value("misc.stop", value)
+    if data.get("bypass"):
+        await api.set_value("boiler.timer", 1)
+        data["bypass"] = False
+    await data["coordinator"].async_request_refresh()
+
+
+def ensure_services(hass: HomeAssistant):
+    """Registrér tjenester én gang (YAML- eller entry-sti, whichever kommer først)."""
+    data = hass.data[DOMAIN]
+    if data.get("services_ok"):
+        return
+    data["services_ok"] = True
 
     async def svc_start(call):
-        """misc.start — lægger fyret under timeren.
-        ignorer_ur: true => timer slås midlertidigt FRA og restores ved næste stop
-        (kommandoen "tænd fyret uanset uret")."""
-        if call.data.get("ignorer_ur"):
-            data = coordinator.data or {}
-            if data.get("boiler.timer") == 1:
-                await api.set_value("boiler.timer", 0)
-                hass.data[DOMAIN]["bypass"] = True
-        await api.set_value("misc.start", call.data.get("value", 1))
+        await do_start(hass, call.data.get("value", 1), call.data.get("ignorer_ur", False))
 
     async def svc_stop(call):
-        """misc.stop = hård off. Restorer timeren hvis en bypass-start havde slået den fra."""
-        await api.set_value("misc.stop", call.data.get("value", 1))
-        if hass.data[DOMAIN].get("bypass"):
-            await api.set_value("boiler.timer", 1)
-            hass.data[DOMAIN]["bypass"] = False
+        await do_stop(hass, call.data.get("value", 1))
 
     async def svc_timer(call):
-        """boiler.timer on/off — slå urstyringen fra/til (vinterdrift)."""
-        await api.set_value("boiler.timer", 1 if call.data.get("aktiv") else 0)
+        await hass.data[DOMAIN]["api"].set_value(
+            "boiler.timer", 1 if call.data.get("aktiv") else 0
+        )
 
     async def svc_set(call):
-        await api.set_value(call.data["name"], call.data["value"])
+        await hass.data[DOMAIN]["api"].set_value(call.data["name"], call.data["value"])
 
     async def svc_reset_alarm(call):
-        await api.set_value("misc.reset_alarm", 1)
+        await hass.data[DOMAIN]["api"].set_value("misc.reset_alarm", 1)
 
     hass.services.async_register(DOMAIN, "start", svc_start)
     hass.services.async_register(DOMAIN, "stop", svc_stop)
     hass.services.async_register(DOMAIN, "timer", svc_timer)
     hass.services.async_register(DOMAIN, "set_value", svc_set)
     hass.services.async_register(DOMAIN, "reset_alarm", svc_reset_alarm)
+
+
+async def async_setup(hass: HomeAssistant, config):
+    """Gammel YAML-sti: pillefyr: i configuration.yaml."""
+    conf = config[DOMAIN]
+    session = async_get_clientsession(hass)
+    api = PilleFyrAPI(session, conf[CONF_USERNAME], conf[CONF_PASSWORD])
+    data = ensure_state(hass, api)
+    if "coordinator" in data:
+        await data["coordinator"].async_refresh()
+    ensure_services(hass)
+    data.setdefault("username", conf[CONF_USERNAME])
     return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: config_entries.ConfigEntry):
+    """UI-sti: Tilføj integration."""
+    session = async_get_clientsession(hass)
+    api = PilleFyrAPI(
+        session, entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD]
+    )
+    try:
+        await api.login()
+    except UpdateFailed as err:
+        raise ConfigEntryNotReady(str(err)) from err
+
+    data = ensure_state(hass, api)
+    data.setdefault("username", entry.data[CONF_USERNAME])
+    if "coordinator" in data:
+        coordinator = data["coordinator"]
+    else:
+        coordinator = make_coordinator(hass, api)
+        data["coordinator"] = coordinator
+        await coordinator.async_refresh()
+    ensure_services(hass)
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: config_entries.ConfigEntry):
+    """Losser platforme; lad koordinatoren køre hvis YAML-stien også er aktiv."""
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

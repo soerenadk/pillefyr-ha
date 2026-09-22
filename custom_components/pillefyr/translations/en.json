@@ -1,0 +1,21 @@
+{
+  "title": "Blackstar pillefyr (Stokercloud)",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Pillefyr via Stokercloud",
+        "description": "Login til dit Stokercloud-dashboard (samme bruger som i appen).",
+        "data": {
+          "username": "Brugernavn",
+          "password": "Kodeord (ctrlpassword)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kunne ikke logge ind — tjek brugernavn og kodeord."
+    },
+    "abort": {
+      "already_configured": "Dette Stokercloud-login er allerede opsat."
+    }
+  }
+}

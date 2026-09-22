@@ -1,10 +1,11 @@
-"""Sensore for pillefyret — platform: pillefyr i configuration.yaml."""
+"""Sensore for pillefyret — UI-entry eller YAML (platform: pillefyr)."""
 import logging
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DOMAIN
+from .switch import DEVICE_INFO
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,8 +22,20 @@ MAIN = [
 ]
 
 
+async def async_setup_entry(hass, entry, add_entities):
+    """UI-sti."""
+    _add_all(hass, add_entities)
+
+
 async def async_setup_platform(hass, config, add_entities, discovery_info=None):
+    """YAML-sti."""
+    _add_all(hass, add_entities)
+
+
+def _add_all(hass, add_entities):
     coordinator = hass.data[DOMAIN]["coordinator"]
+    username = hass.data[DOMAIN].get("username", "stove")
+    device = DEVICE_INFO(username)
 
     class PilleFyrSensor(CoordinatorEntity, SensorEntity):
         def __init__(self, key, name, unit, dev_class):
@@ -32,6 +45,7 @@ async def async_setup_platform(hass, config, add_entities, discovery_info=None):
             self._attr_unique_id = f"pillefyr_{key.replace('.', '_')}"
             self._attr_native_unit_of_measurement = unit
             self._attr_device_class = dev_class
+            self._attr_device_info = device
 
         @property
         def native_value(self):
@@ -49,6 +63,7 @@ async def async_setup_platform(hass, config, add_entities, discovery_info=None):
         """Afledt tilstand: I drift / Tænder op / Stoppet af ur / Off."""
         _attr_name = "Pillefyr tilstand"
         _attr_unique_id = "pillefyr_tilstand"
+        _attr_device_info = device
 
         def __init__(self, coordinator):
             super().__init__(coordinator)

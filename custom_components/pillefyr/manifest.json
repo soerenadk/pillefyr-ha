@@ -1,12 +1,15 @@
 {
   "domain": "pillefyr",
   "name": "Blackstar pillefyr (Stokercloud)",
-  "version": "1.1.0",
-  "documentation": "https://stokercloud.dk",
+  "version": "1.2.0",
+  "documentation": "https://github.com/soerenadk/pillefyr-ha",
+  "issue_tracker": "https://github.com/soerenadk/pillefyr-ha/issues",
   "codeowners": [
     "@soerenadk"
   ],
   "requirements": [],
   "iot_class": "cloud_polling",
-  "config_flow": false
+  "integration_type": "device",
+  "single_config_entry": true,
+  "config_flow": true
 }

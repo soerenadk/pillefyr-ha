@@ -1,0 +1,53 @@
+start:
+  name: Start
+  description: >-
+    Tænd pillefyret (timer-styret start). Ignorerer ur-spærringen hvis
+    ignorer_ur er sand (bypass med automatisk gendannelse).
+  fields:
+    value:
+      name: Værdi
+      description: Værdi der sendes til boiler.start (standard 1).
+      required: false
+      example: 1
+    ignorer_ur:
+      name: Ignorer ur
+      description: Start uanset ur-spærring (bypass + automatisk restore).
+      required: false
+      default: false
+      example: false
+stop:
+  name: Stop
+  description: Sluk pillefyret (hård stop).
+  fields:
+    value:
+      name: Værdi
+      description: Værdi der sendes til boiler.stop (standard 1).
+      required: false
+      example: 1
+timer:
+  name: Timer
+  description: Slå fyrets timer-styring til eller fra.
+  fields:
+    aktiv:
+      name: Aktiv
+      description: Sand = timer-styring til, falsk = fra.
+      required: false
+      default: true
+      example: true
+set_value:
+  name: Sæt værdi
+  description: Skriv en rå værdi til Stokercloud-API'et (avanceret).
+  fields:
+    name:
+      name: Navn
+      description: Parameter-navn, fx boiler.target_temperature.
+      required: true
+      example: boiler.target_temperature
+    value:
+      name: Værdi
+      description: Værdien der skrives.
+      required: true
+      example: 70
+reset_alarm:
+  name: Nulstil alarm
+  description: Nulstil fyrets alarm.
